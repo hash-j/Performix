@@ -1,0 +1,14 @@
+# KPI Dashboard - robots.txt
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://kpi-dashboard.example.com/sitemap.xml
+
+# Disallow crawling of API endpoints
+Disallow: /api/
+Disallow: /admin/
+Disallow: /private/
+
+# Allow all other pages
+Allow: /
