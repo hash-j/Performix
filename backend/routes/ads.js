@@ -13,9 +13,10 @@ router.get('/', async (req, res) => {
             FROM ads_kpis a
             LEFT JOIN clients c ON a.client_id = c.id
             LEFT JOIN team_members tm ON a.team_member_id = tm.id
-            WHERE 1=1
+            WHERE a.company_id = $1
         `;
-        const params = [];
+        const companyId = req.user.company_id;
+        const params = [companyId];
 
         if (startDate) {
             query += ` AND a.date >= $${params.length + 1}`;
@@ -67,12 +68,12 @@ router.post('/', authorize(['admin', 'editor']), async (req, res) => {
     try {
         const result = await pool.query(
             `INSERT INTO ads_kpis 
-            (client_id, team_member_id, team_member_ids, date, platform, cost_per_lead, quality_of_ads,
+            (company_id, client_id, team_member_id, team_member_ids, date, platform, cost_per_lead, quality_of_ads,
              lead_quality, closing_ratio, quantity_leads, keyword_refinement,
              cost_per_click, conversions, closing, tracking)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *`,
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
             [
-                client_id, primaryTeamMemberId, team_member_ids || [], date, platform, cost_per_lead, quality_of_ads,
+                req.user.company_id, client_id, primaryTeamMemberId, team_member_ids || [], date, platform, cost_per_lead, quality_of_ads,
                 lead_quality, closing_ratio, quantity_leads, keyword_refinement,
                 cost_per_click, conversions, closing, tracking
             ]
@@ -135,11 +136,11 @@ router.put('/:id', authorize(['admin', 'editor']), async (req, res) => {
                 closing_ratio = $9, quantity_leads = $10, keyword_refinement = $11,
                 cost_per_click = $12, conversions = $13, closing = $14, tracking = $15,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = $16 RETURNING *`,
+            WHERE id = $16 AND company_id = $17 RETURNING *`,
             [
                 client_id, primaryTeamMemberId, team_member_ids || [], date, platform, cost_per_lead, quality_of_ads,
                 lead_quality, closing_ratio, quantity_leads, keyword_refinement,
-                cost_per_click, conversions, closing, tracking, id
+                cost_per_click, conversions, closing, tracking, id, req.user.company_id
             ]
         );
         
@@ -179,8 +180,8 @@ router.delete('/:id', authorize(['admin', 'editor']), async (req, res) => {
 
     try {
         const result = await pool.query(
-            'DELETE FROM ads_kpis WHERE id = $1 RETURNING *',
-            [id]
+            'DELETE FROM ads_kpis WHERE id = $1 AND company_id = $2 RETURNING *',
+            [id, req.user.company_id]
         );
         
         if (result.rows.length === 0) {

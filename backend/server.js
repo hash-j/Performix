@@ -37,19 +37,39 @@ pool.connect((err, client, release) => {
     }
 });
 
-// Public routes (auth)
-app.use('/api/auth', require('./routes/auth'));
+const authRoutes = require('./routes/auth');
+const clientRoutes = require('./routes/clients');
+const socialMediaRoutes = require('./routes/socialMedia');
+const websiteSeoRoutes = require('./routes/websiteSeo');
+const adsRoutes = require('./routes/ads');
+const emailRoutes = require('./routes/email');
+const teamKpiRoutes = require('./routes/teamKpis');
+const responseRoutes = require('./routes/responses');
+const activityRoutes = require('./routes/activities');
+const teamRoutes = require('./routes/team');
+const integrationsRoutes = require('./routes/integrations');
+
+// API Routes
+app.use('/api/auth', authRoutes);
+
+// Protected Routes
+app.use('/api/clients', authenticateToken, clientRoutes);
+app.use('/api/social-media', authenticateToken, socialMediaRoutes);
+app.use('/api/website-seo', authenticateToken, websiteSeoRoutes);
+app.use('/api/ads', authenticateToken, adsRoutes);
+app.use('/api/email-marketing', authenticateToken, emailRoutes);
+app.use('/api/team-kpis', authenticateToken, teamKpiRoutes);
+app.use('/api/client-responses', authenticateToken, responseRoutes);
+app.use('/api/activities', authenticateToken, activityRoutes);
+app.use('/api/team-members', authenticateToken, teamRoutes);
+app.use('/api/integrations', authenticateToken, integrationsRoutes);
+app.use('/api/kpis', authenticateToken, require('./routes/kpis'));
+app.use('/api/ai', authenticateToken, require('./routes/ai'));
 
 // Health check (public)
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
-
-// Protected routes (require authentication)
-app.use('/api/kpis', authenticateToken, require('./routes/kpis'));
-app.use('/api/ai', authenticateToken, require('./routes/ai'));
-
-app.use('/api/activities', authenticateToken, require('./routes/activities'));
 
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);

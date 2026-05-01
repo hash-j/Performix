@@ -13,9 +13,10 @@ router.get('/', async (req, res) => {
             FROM email_marketing_kpis em
             LEFT JOIN clients c ON em.client_id = c.id
             LEFT JOIN team_members tm ON em.team_member_id = tm.id
-            WHERE 1=1
+            WHERE em.company_id = $1
         `;
-        const params = [];
+        const companyId = req.user.company_id;
+        const params = [companyId];
 
         if (startDate) {
             query += ` AND em.date >= $${params.length + 1}`;
@@ -61,9 +62,9 @@ router.post('/', authorize(['admin', 'editor']), async (req, res) => {
     try {
         const result = await pool.query(
             `INSERT INTO email_marketing_kpis 
-            (client_id, team_member_id, team_member_ids, date, template_quality, emails_sent, opening_ratio)
-            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-            [client_id, primaryTeamMemberId, team_member_ids || [], date, template_quality, emails_sent, opening_ratio]
+            (company_id, client_id, team_member_id, team_member_ids, date, template_quality, emails_sent, opening_ratio)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+            [req.user.company_id, client_id, primaryTeamMemberId, team_member_ids || [], date, template_quality, emails_sent, opening_ratio]
         );
         
         const kpi = result.rows[0];
@@ -115,8 +116,8 @@ router.put('/:id', authorize(['admin', 'editor']), async (req, res) => {
             SET client_id = $1, team_member_id = $2, team_member_ids = $3, date = $4, 
                 template_quality = $5, emails_sent = $6, opening_ratio = $7,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = $8 RETURNING *`,
-            [client_id, primaryTeamMemberId, team_member_ids || [], date, template_quality, emails_sent, opening_ratio, id]
+            WHERE id = $8 AND company_id = $9 RETURNING *`,
+            [client_id, primaryTeamMemberId, team_member_ids || [], date, template_quality, emails_sent, opening_ratio, id, req.user.company_id]
         );
         
         if (result.rows.length === 0) {
@@ -155,8 +156,8 @@ router.delete('/:id', authorize(['admin', 'editor']), async (req, res) => {
 
     try {
         const result = await pool.query(
-            'DELETE FROM email_marketing_kpis WHERE id = $1 RETURNING *',
-            [id]
+            'DELETE FROM email_marketing_kpis WHERE id = $1 AND company_id = $2 RETURNING *',
+            [id, req.user.company_id]
         );
         
         if (result.rows.length === 0) {

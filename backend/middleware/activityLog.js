@@ -14,10 +14,16 @@ async function logActivity(userId, actionType, entityType, entityId, entityName,
     try {
         console.log(`[Activity Log] Logging: ${actionType} - ${entityType}: ${entityName} (User: ${userId})`);
         
+        let companyId = null;
+        if (userId) {
+            const userRes = await pool.query('SELECT company_id FROM users WHERE id = $1', [userId]);
+            companyId = userRes.rows[0]?.company_id;
+        }
+        
         const result = await pool.query(
-            `INSERT INTO activity_log (user_id, action_type, entity_type, entity_id, entity_name, tab_name, description)
-             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-            [userId, actionType, entityType, entityId, entityName, tabName || null, description]
+            `INSERT INTO activity_log (user_id, company_id, action_type, entity_type, entity_id, entity_name, tab_name, description)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+            [userId, companyId, actionType, entityType, entityId, entityName, tabName || null, description]
         );
         
         console.log(`[Activity Log] ✓ Logged successfully - ID: ${result.rows[0].id}`);

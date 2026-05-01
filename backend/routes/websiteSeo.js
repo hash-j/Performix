@@ -13,9 +13,10 @@ router.get('/', async (req, res) => {
             FROM website_seo_kpis ws
             LEFT JOIN clients c ON ws.client_id = c.id
             LEFT JOIN team_members tm ON ws.team_member_id = tm.id
-            WHERE 1=1
+            WHERE ws.company_id = $1
         `;
-        const params = [];
+        const companyId = req.user.company_id;
+        const params = [companyId];
 
         if (startDate) {
             query += ` AND ws.date >= $${params.length + 1}`;
@@ -75,12 +76,12 @@ router.post('/', authorize(['admin', 'editor']), async (req, res) => {
     try {
         const result = await pool.query(
             `INSERT INTO website_seo_kpis 
-                (client_id, team_member_id, team_member_ids, date, changes_asked, changes_asked_details, changes_asked_statuses, blogs_posted,
+                (company_id, client_id, team_member_id, team_member_ids, date, changes_asked, changes_asked_details, changes_asked_statuses, blogs_posted,
                  ranking_issues, ranking_issues_description, reports_sent, backlinks, gmb_updates, gmb_changes_count, gmb_changes_details, domain_authority, page_authority,
                  keyword_pass, keyword_names, keyword_positions, site_health)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21) RETURNING *`,
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22) RETURNING *`,
                 [
-                    client_id, primaryTeamMemberId, team_member_ids || [], date, changes_asked, changes_asked_details || [], changes_asked_statuses || [], blogs_posted,
+                    req.user.company_id, client_id, primaryTeamMemberId, team_member_ids || [], date, changes_asked, changes_asked_details || [], changes_asked_statuses || [], blogs_posted,
                     ranking_issues, ranking_issues_description, reports_sent, backlinks, gmb_updates || 0, gmb_changes_count || 0, gmb_changes_details || [], domain_authority, page_authority,
                     keyword_pass, keyword_names || [], keyword_positions || [], site_health
                 ]
@@ -151,11 +152,11 @@ router.put('/:id', authorize(['admin', 'editor']), async (req, res) => {
                 backlinks = $12, gmb_updates = $13, gmb_changes_count = $14, gmb_changes_details = $15, domain_authority = $16, page_authority = $17,
                 keyword_pass = $18, keyword_names = $19, keyword_positions = $20, site_health = $21,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = $22 RETURNING *`,
+            WHERE id = $22 AND company_id = $23 RETURNING *`,
             [
                 client_id, primaryTeamMemberId, team_member_ids || [], date, changes_asked, changes_asked_details || [], changes_asked_statuses || [], blogs_posted,
                 ranking_issues, ranking_issues_description, reports_sent, backlinks, gmb_updates || 0, gmb_changes_count || 0, gmb_changes_details || [], domain_authority, page_authority,
-                keyword_pass, keyword_names || [], keyword_positions || [], site_health, id
+                keyword_pass, keyword_names || [], keyword_positions || [], site_health, id, req.user.company_id
             ]
         );
         
@@ -195,8 +196,8 @@ router.delete('/:id', authorize(['admin', 'editor']), async (req, res) => {
 
     try {
         const result = await pool.query(
-            'DELETE FROM website_seo_kpis WHERE id = $1 RETURNING *',
-            [id]
+            'DELETE FROM website_seo_kpis WHERE id = $1 AND company_id = $2 RETURNING *',
+            [id, req.user.company_id]
         );
         
         if (result.rows.length === 0) {

@@ -13,9 +13,10 @@ router.get('/', async (req, res) => {
             FROM client_responses cr
             LEFT JOIN clients c ON cr.client_id = c.id
             LEFT JOIN team_members tm ON cr.team_member_id = tm.id
-            WHERE 1=1
+            WHERE cr.company_id = $1
         `;
-        const params = [];
+        const companyId = req.user.company_id;
+        const params = [companyId];
 
         if (startDate) {
             query += ` AND cr.date >= $${params.length + 1}`;
@@ -61,9 +62,9 @@ router.post('/', authorize(['admin', 'editor']), async (req, res) => {
     try {
         const result = await pool.query(
             `INSERT INTO client_responses 
-            (client_id, team_member_id, team_member_ids, date, review_rating, review_comment, miscellaneous_work)
-            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-            [client_id, primaryTeamMemberId, team_member_ids || [], date, review_rating, review_comment, miscellaneous_work]
+            (company_id, client_id, team_member_id, team_member_ids, date, review_rating, review_comment, miscellaneous_work)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+            [req.user.company_id, client_id, primaryTeamMemberId, team_member_ids || [], date, review_rating, review_comment, miscellaneous_work]
         );
         
         const response = result.rows[0];
@@ -115,8 +116,8 @@ router.put('/:id', authorize(['admin', 'editor']), async (req, res) => {
             SET client_id = $1, team_member_id = $2, team_member_ids = $3, date = $4, 
                 review_rating = $5, review_comment = $6, miscellaneous_work = $7,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = $8 RETURNING *`,
-            [client_id, primaryTeamMemberId, team_member_ids || [], date, review_rating, review_comment, miscellaneous_work, id]
+            WHERE id = $8 AND company_id = $9 RETURNING *`,
+            [client_id, primaryTeamMemberId, team_member_ids || [], date, review_rating, review_comment, miscellaneous_work, id, req.user.company_id]
         );
         
         if (result.rows.length === 0) {
@@ -155,8 +156,8 @@ router.delete('/:id', authorize(['admin', 'editor']), async (req, res) => {
 
     try {
         const result = await pool.query(
-            'DELETE FROM client_responses WHERE id = $1 RETURNING *',
-            [id]
+            'DELETE FROM client_responses WHERE id = $1 AND company_id = $2 RETURNING *',
+            [id, req.user.company_id]
         );
         
         if (result.rows.length === 0) {

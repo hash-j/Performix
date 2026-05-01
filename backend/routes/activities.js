@@ -71,9 +71,10 @@ router.get('/', async (req, res) => {
                 u.full_name as user_name
             FROM activity_log al
             LEFT JOIN users u ON al.user_id = u.id
+            WHERE al.company_id = $1
             ORDER BY al.created_at DESC
-            LIMIT $1`,
-            [limit]
+            LIMIT $2`,
+            [req.user.company_id, limit]
         );
         
         res.json(result.rows);
@@ -104,10 +105,10 @@ router.get('/by-action/:actionType', async (req, res) => {
                 u.full_name as user_name
             FROM activity_log al
             LEFT JOIN users u ON al.user_id = u.id
-            WHERE al.action_type = $1
+            WHERE al.action_type = $1 AND al.company_id = $2
             ORDER BY al.created_at DESC
-            LIMIT $2`,
-            [actionType, limit]
+            LIMIT $3`,
+            [actionType, req.user.company_id, limit]
         );
         
         res.json(result.rows);
@@ -137,9 +138,9 @@ router.get('/by-date', async (req, res) => {
                 u.full_name as user_name
             FROM activity_log al
             LEFT JOIN users u ON al.user_id = u.id
-            WHERE 1=1`;
+            WHERE al.company_id = $1`;
         
-        const params = [];
+        const params = [req.user.company_id];
         
         if (startDate) {
             query += ` AND al.created_at >= $${params.length + 1}`;

@@ -4,10 +4,11 @@ const pool = require('../config/database');
 const { logActivity } = require('../middleware/activityLog');
 const { authorize } = require('../middleware/auth');
 
-// Get all team members
+// Get all team members for the current company
 router.get('/', async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM team_members ORDER BY name');
+        const companyId = req.user.company_id;
+        const result = await pool.query('SELECT * FROM team_members WHERE company_id = $1 ORDER BY name', [companyId]);
         res.json(result.rows);
     } catch (error) {
         console.error('Error fetching team members:', error);
@@ -16,18 +17,19 @@ router.get('/', async (req, res) => {
 });
 
 // Create new team member
-router.post('/', authorize(['admin', 'editor']), async (req, res) => {
+router.post('/', authorize(['superadmin', 'admin', 'editor']), async (req, res) => {
     const { name, email } = req.body;
+    const companyId = req.user.company_id;
     try {
         const result = await pool.query(
-            'INSERT INTO team_members (name, email) VALUES ($1, $2) RETURNING *',
-            [name, email]
+            'INSERT INTO team_members (company_id, name, email) VALUES ($1, $2, $3) RETURNING *',
+            [companyId, name, email]
         );
         const member = result.rows[0];
         
         // Log the activity
-        const userId = req.user?.id || null;
-        const userName = req.user?.full_name || 'Unknown User';
+        const userId = req.user.id;
+        const userName = req.user.full_name;
         await logActivity(
             userId,
             'team_member_added',
@@ -46,13 +48,14 @@ router.post('/', authorize(['admin', 'editor']), async (req, res) => {
 });
 
 // Update team member
-router.put('/:id', authorize(['admin', 'editor']), async (req, res) => {
+router.put('/:id', authorize(['superadmin', 'admin', 'editor']), async (req, res) => {
     const { id } = req.params;
     const { name, email } = req.body;
+    const companyId = req.user.company_id;
     try {
         const result = await pool.query(
-            'UPDATE team_members SET name = $1, email = $2 WHERE id = $3 RETURNING *',
-            [name, email, id]
+            'UPDATE team_members SET name = $1, email = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND company_id = $4 RETURNING *',
+            [name, email, id, companyId]
         );
         
         if (result.rows.length === 0) {
@@ -62,8 +65,8 @@ router.put('/:id', authorize(['admin', 'editor']), async (req, res) => {
         const member = result.rows[0];
         
         // Log the activity
-        const userId = req.user?.id || null;
-        const userName = req.user?.full_name || 'Unknown User';
+        const userId = req.user.id;
+        const userName = req.user.full_name;
         await logActivity(
             userId,
             'team_member_edited',
@@ -82,42 +85,37 @@ router.put('/:id', authorize(['admin', 'editor']), async (req, res) => {
 });
 
 // Delete team member and all related data
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authorize(['superadmin', 'admin', 'editor']), async (req, res) => {
     const { id } = req.params;
+    const companyId = req.user.company_id;
     const connection = await pool.connect();
     try {
         await connection.query('BEGIN');
         
-        // Get member name for logging
-        const memberResult = await connection.query('SELECT name FROM team_members WHERE id = $1', [id]);
-        const memberName = memberResult.rows[0]?.name || 'Unknown Member';
-        
-        // Delete all related KPI data first (set team_member_id to NULL or delete)
-        await connection.query('DELETE FROM team_kpis WHERE team_member_id = $1', [id]);
-        await connection.query('UPDATE social_media_kpis SET team_member_id = NULL WHERE team_member_id = $1', [id]);
-        await connection.query('UPDATE website_seo_kpis SET team_member_id = NULL WHERE team_member_id = $1', [id]);
-        await connection.query('UPDATE ads_kpis SET team_member_id = NULL WHERE team_member_id = $1', [id]);
-        await connection.query('UPDATE email_marketing_kpis SET team_member_id = NULL WHERE team_member_id = $1', [id]);
-        await connection.query('UPDATE client_responses SET team_member_id = NULL WHERE team_member_id = $1', [id]);
-        
-        // Delete the team member
-        const result = await connection.query(
-            'DELETE FROM team_members WHERE id = $1 RETURNING *',
-            [id]
-        );
-        
-        if (result.rows.length === 0) {
+        // Get member name for logging and ensure they belong to this company
+        const memberResult = await connection.query('SELECT name FROM team_members WHERE id = $1 AND company_id = $2', [id, companyId]);
+        if (memberResult.rows.length === 0) {
             await connection.query('ROLLBACK');
             connection.release();
             return res.status(404).json({ error: 'Team member not found' });
         }
+        const memberName = memberResult.rows[0].name;
+        
+        // Due to schema CASCADE constraints, deleting the team_member handles team_kpis deletion,
+        // and sets team_member_id to NULL in social_media_kpis, website_seo_kpis, ads_kpis, email_marketing_kpis, client_responses.
+        // We only need to delete the member itself.
+        const result = await connection.query(
+            'DELETE FROM team_members WHERE id = $1 AND company_id = $2 RETURNING *',
+            [id, companyId]
+        );
         
         await connection.query('COMMIT');
         connection.release();
+        
         // Log the deletion
         try {
-            const userId = req.user?.id || null;
-            const userName = req.user?.full_name || 'Unknown User';
+            const userId = req.user.id;
+            const userName = req.user.full_name;
             await logActivity(
                 userId,
                 'team_member_deleted',
@@ -131,7 +129,7 @@ router.delete('/:id', async (req, res) => {
             console.error('Error logging team member deletion:', e.message);
         }
 
-        res.json({ message: 'Team member and all related data deleted successfully', deletedMember: result.rows[0] });
+        res.json({ message: 'Team member deleted successfully', deletedMember: result.rows[0] });
     } catch (error) {
         try {
             await connection.query('ROLLBACK');

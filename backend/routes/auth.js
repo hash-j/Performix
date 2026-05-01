@@ -181,7 +181,8 @@ router.get('/users', authenticateToken, async (req, res) => {
     }
 
     const result = await db.query(
-      'SELECT id, full_name, username, email, role, is_active, created_at FROM users ORDER BY created_at DESC'
+      'SELECT id, full_name, username, email, role, is_active, created_at FROM users WHERE company_id = $1 ORDER BY created_at DESC',
+      [req.user.company_id]
     );
 
     res.json(result.rows);
@@ -205,8 +206,8 @@ router.delete('/users/:userId', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Cannot delete your own account' });
     }
 
-    // Delete and return deleted user for logging
-    const result = await db.query('DELETE FROM users WHERE id = $1 RETURNING *', [userId]);
+    // Delete and return deleted user for logging, ensuring they belong to the same company
+    const result = await db.query('DELETE FROM users WHERE id = $1 AND company_id = $2 RETURNING *', [userId, req.user.company_id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -259,8 +260,8 @@ router.put('/users/:userId', authenticateToken, async (req, res) => {
     // Check if email already exists for another user
     if (email) {
       const existingUser = await db.query(
-        'SELECT id FROM users WHERE email = $1 AND id != $2',
-        [email, userId]
+        'SELECT id FROM users WHERE email = $1 AND id != $2 AND company_id = $3',
+        [email, userId, req.user.company_id]
       );
       if (existingUser.rows.length > 0) {
         return res.status(400).json({ error: 'Email already exists' });
@@ -296,10 +297,9 @@ router.put('/users/:userId', authenticateToken, async (req, res) => {
       paramCount++;
     }
 
-    // Remove trailing comma and space
     updateQuery = updateQuery.slice(0, -2);
-    updateQuery += ` WHERE id = $${paramCount} RETURNING id, full_name, username, email, role`;
-    values.push(userId);
+    updateQuery += ` WHERE id = $${paramCount} AND company_id = $${paramCount + 1} RETURNING id, full_name, username, email, role`;
+    values.push(userId, req.user.company_id);
 
     const result = await db.query(updateQuery, values);
 

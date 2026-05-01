@@ -4,10 +4,11 @@ const pool = require('../config/database');
 const { logActivity } = require('../middleware/activityLog');
 const { authorize } = require('../middleware/auth');
 
-// Get all clients
+// Get all clients for the current company
 router.get('/', async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM clients ORDER BY name');
+        const companyId = req.user.company_id;
+        const result = await pool.query('SELECT * FROM clients WHERE company_id = $1 ORDER BY name', [companyId]);
         res.json(result.rows);
     } catch (error) {
         console.error('Error fetching clients:', error);
@@ -16,27 +17,19 @@ router.get('/', async (req, res) => {
 });
 
 // Create new client
-router.post('/', authorize(['admin', 'editor']), async (req, res) => {
+router.post('/', authorize(['superadmin', 'admin', 'editor']), async (req, res) => {
     const { name } = req.body;
+    const companyId = req.user.company_id;
     try {
-        // Debug: Log user info
-        console.log('[Client Creation] User info:', {
-            userId: req.user?.id,
-            userName: req.user?.full_name,
-            userRole: req.user?.role,
-            hasUser: !!req.user
-        });
-        
         const result = await pool.query(
-            'INSERT INTO clients (name) VALUES ($1) RETURNING *',
-            [name]
+            'INSERT INTO clients (company_id, name) VALUES ($1, $2) RETURNING *',
+            [companyId, name]
         );
         const client = result.rows[0];
-        console.log('[Client Creation] Client created:', client.id, client.name);
         
         // Log the activity
-        const userId = req.user?.id || null;
-        const userName = req.user?.full_name || 'Unknown User';
+        const userId = req.user.id;
+        const userName = req.user.full_name;
         await logActivity(
             userId,
             'client_added',
@@ -57,8 +50,9 @@ router.post('/', authorize(['admin', 'editor']), async (req, res) => {
 // Get client by ID
 router.get('/:id', async (req, res) => {
     const { id } = req.params;
+    const companyId = req.user.company_id;
     try {
-        const result = await pool.query('SELECT * FROM clients WHERE id = $1', [id]);
+        const result = await pool.query('SELECT * FROM clients WHERE id = $1 AND company_id = $2', [id, companyId]);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Client not found' });
         }
@@ -70,17 +64,18 @@ router.get('/:id', async (req, res) => {
 });
 
 // Update client
-router.put('/:id', authorize(['admin', 'editor']), async (req, res) => {
+router.put('/:id', authorize(['superadmin', 'admin', 'editor']), async (req, res) => {
     const { id } = req.params;
     const { name } = req.body;
+    const companyId = req.user.company_id;
     try {
         if (!name || !name.trim()) {
             return res.status(400).json({ error: 'Client name is required' });
         }
 
         const result = await pool.query(
-            'UPDATE clients SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
-            [name.trim(), id]
+            'UPDATE clients SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND company_id = $3 RETURNING *',
+            [name.trim(), id, companyId]
         );
 
         if (result.rows.length === 0) {
@@ -90,8 +85,8 @@ router.put('/:id', authorize(['admin', 'editor']), async (req, res) => {
         const client = result.rows[0];
         
         // Log the activity
-        const userId = req.user?.id || null;
-        const userName = req.user?.full_name || 'Unknown User';
+        const userId = req.user.id;
+        const userName = req.user.full_name;
         await logActivity(
             userId,
             'client_edited',
@@ -110,42 +105,35 @@ router.put('/:id', authorize(['admin', 'editor']), async (req, res) => {
 });
 
 // Delete client and all related data
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authorize(['superadmin', 'admin', 'editor']), async (req, res) => {
     const { id } = req.params;
+    const companyId = req.user.company_id;
     const connection = await pool.connect();
     try {
         await connection.query('BEGIN');
         
-        // Get client name for logging
-        const clientResult = await connection.query('SELECT name FROM clients WHERE id = $1', [id]);
-        const clientName = clientResult.rows[0]?.name || 'Unknown Client';
-        
-        // Delete all related KPI data first
-        await connection.query('DELETE FROM social_media_kpis WHERE client_id = $1', [id]);
-        await connection.query('DELETE FROM website_seo_kpis WHERE client_id = $1', [id]);
-        await connection.query('DELETE FROM ads_kpis WHERE client_id = $1', [id]);
-        await connection.query('DELETE FROM email_marketing_kpis WHERE client_id = $1', [id]);
-        await connection.query('DELETE FROM client_responses WHERE client_id = $1', [id]);
-        
-        // Delete the client
-        const result = await connection.query(
-            'DELETE FROM clients WHERE id = $1 RETURNING *',
-            [id]
-        );
-
-        if (result.rows.length === 0) {
+        // Check if client exists and belongs to company
+        const clientResult = await connection.query('SELECT name FROM clients WHERE id = $1 AND company_id = $2', [id, companyId]);
+        if (clientResult.rows.length === 0) {
             await connection.query('ROLLBACK');
             connection.release();
             return res.status(404).json({ error: 'Client not found' });
         }
+        const clientName = clientResult.rows[0].name;
+        
+        // Delete the client (cascading deletes will handle the KPI tables due to ON DELETE CASCADE)
+        const result = await connection.query(
+            'DELETE FROM clients WHERE id = $1 AND company_id = $2 RETURNING *',
+            [id, companyId]
+        );
 
         await connection.query('COMMIT');
         connection.release();
         
         // Log the deletion activity
         try {
-            const userId = req.user?.id || null;
-            const userName = req.user?.full_name || 'Unknown User';
+            const userId = req.user.id;
+            const userName = req.user.full_name;
             await logActivity(
                 userId,
                 'client_deleted',

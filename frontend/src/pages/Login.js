@@ -119,7 +119,7 @@ const Login = () => {
                     WebkitTextFillColor: 'transparent',
                   }}
                 >
-                  KPI Dashboard
+                  Performix
                 </Typography>
               </Box>
               <Typography variant="body1" color="textSecondary">

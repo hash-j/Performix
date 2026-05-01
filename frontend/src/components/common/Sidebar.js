@@ -26,6 +26,7 @@ import {
   ExpandLess,
   ExpandMore,
   Add as AddIcon,
+  Hub as IntegrationIcon,
 } from '@mui/icons-material';
 
 const drawerWidth = 280;
@@ -50,6 +51,11 @@ const Sidebar = ({ open, toggleSidebar }) => {
       text: 'Team',
       icon: <PeopleIcon />,
       path: '/team',
+    },
+    {
+      text: 'Integrations',
+      icon: <IntegrationIcon />,
+      path: '/integrations',
     },
   ];
 

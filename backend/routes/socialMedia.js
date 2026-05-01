@@ -13,9 +13,10 @@ router.get('/', async (req, res) => {
             FROM social_media_kpis sm
             LEFT JOIN clients c ON sm.client_id = c.id
             LEFT JOIN team_members tm ON sm.team_member_id = tm.id
-            WHERE 1=1
+            WHERE sm.company_id = $1
         `;
-        const params = [];
+        const companyId = req.user.company_id;
+        const params = [companyId];
 
         if (startDate) {
             query += ` AND sm.date >= $${params.length + 1}`;
@@ -99,12 +100,12 @@ router.post('/', authorize(['admin', 'editor']), async (req, res) => {
     try {
         const result = await pool.query(
             `INSERT INTO social_media_kpis 
-            (client_id, team_member_id, team_member_ids, date, platform, quality_score, quantity,
+            (company_id, client_id, team_member_id, team_member_ids, date, platform, quality_score, quantity,
              instagram_stories, instagram_stories_quality, instagram_posts, instagram_posts_quality, instagram_reels, instagram_reels_quality,
              facebook_stories, facebook_stories_quality, facebook_posts, facebook_posts_quality, facebook_reels, facebook_reels_quality,
              tiktok_stories, tiktok_stories_quality, tiktok_posts, tiktok_posts_quality, tiktok_reels, tiktok_reels_quality)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25) RETURNING *`,
-            [client_id, primaryTeamMemberId, team_member_ids || [], date, platform, finalQualityScore, finalQuantity,
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26) RETURNING *`,
+            [req.user.company_id, client_id, primaryTeamMemberId, team_member_ids || [], date, platform, finalQualityScore, finalQuantity,
              instagram_stories || 0, instagram_stories_quality || 5, instagram_posts || 0, instagram_posts_quality || 5, instagram_reels || 0, instagram_reels_quality || 5,
              facebook_stories || 0, facebook_stories_quality || 5, facebook_posts || 0, facebook_posts_quality || 5, facebook_reels || 0, facebook_reels_quality || 5,
              tiktok_stories || 0, tiktok_stories_quality || 5, tiktok_posts || 0, tiktok_posts_quality || 5, tiktok_reels || 0, tiktok_reels_quality || 5]
@@ -199,12 +200,12 @@ router.put('/:id', authorize(['admin', 'editor']), async (req, res) => {
                 facebook_stories = $14, facebook_stories_quality = $15, facebook_posts = $16, facebook_posts_quality = $17, facebook_reels = $18, facebook_reels_quality = $19,
                 tiktok_stories = $20, tiktok_stories_quality = $21, tiktok_posts = $22, tiktok_posts_quality = $23, tiktok_reels = $24, tiktok_reels_quality = $25,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = $26 RETURNING *`,
+            WHERE id = $26 AND company_id = $27 RETURNING *`,
             [client_id, primaryTeamMemberId, team_member_ids || [], date, platform, finalQualityScore, finalQuantity,
              instagram_stories || 0, instagram_stories_quality || 5, instagram_posts || 0, instagram_posts_quality || 5, instagram_reels || 0, instagram_reels_quality || 5,
              facebook_stories || 0, facebook_stories_quality || 5, facebook_posts || 0, facebook_posts_quality || 5, facebook_reels || 0, facebook_reels_quality || 5,
              tiktok_stories || 0, tiktok_stories_quality || 5, tiktok_posts || 0, tiktok_posts_quality || 5, tiktok_reels || 0, tiktok_reels_quality || 5,
-             id]
+             id, req.user.company_id]
         );
         
         if (result.rows.length === 0) {
@@ -243,8 +244,8 @@ router.delete('/:id', authorize(['admin', 'editor']), async (req, res) => {
 
     try {
         const result = await pool.query(
-            'DELETE FROM social_media_kpis WHERE id = $1 RETURNING *',
-            [id]
+            'DELETE FROM social_media_kpis WHERE id = $1 AND company_id = $2 RETURNING *',
+            [id, req.user.company_id]
         );
         
         if (result.rows.length === 0) {

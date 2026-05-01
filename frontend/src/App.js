@@ -22,6 +22,7 @@ import AddAccount from './pages/AddAccount';
 import UsersManagement from './pages/UsersManagement';
 import ActivityHistory from './pages/ActivityHistory';
 import KpiBuilder from './pages/KpiBuilder';
+import Integrations from './pages/Integrations';
 
 // Context Providers
 import { AuthProvider, AuthContext } from './context/AuthContext';
@@ -265,6 +266,7 @@ function App() {
                                 <Route path="/activity-history" element={<ActivityHistory />} />
                                 <Route path="/kpi-builder" element={<KpiBuilder />} />
                                 <Route path="/team" element={<div style={{color:'white', marginTop:'10px'}}>Team Management (Coming Soon)</div>} />
+                                <Route path="/integrations" element={<Integrations />} />
                               </Routes>
                             </Container>
                             <AIChatWidget />
